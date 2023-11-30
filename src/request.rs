@@ -9,7 +9,8 @@ pub struct GenerateParams {
     prompt: String,
     stream: bool,
     context: Vec<u32>,
-    options: Options,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    options: Option<Options>,
 }
 impl GenerateParams {
     fn new(prompt: String, model: String, context: Vec<u32>) -> Self {
@@ -18,7 +19,7 @@ impl GenerateParams {
             prompt,
             stream: false,
             context,
-            options: Options { num_predict: 150 },
+            options: None,
         }
     }
 }

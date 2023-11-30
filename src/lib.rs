@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use request::OllamaClient;
 use reqwest::Client;
 use shrs::{
@@ -47,12 +47,27 @@ impl OllamaState {
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
+    #[clap(long = "include")]
+    context_include: Vec<ContextArgs>,
+
+    prompt: Vec<String>,
 }
+//What to include as extra info in the prompt, folder will include all the code in all the files in
+//the prompt
+#[derive(ValueEnum, Debug, Clone, Copy)]
+enum ContextArgs {
+    Ls,
+    Envs,
+    Folder,
+    File,
+    Directory,
+}
+
 #[derive(Debug, Subcommand)]
 enum Commands {
     Reset,
     Model { model: String },
-    Prompt { prompt: Vec<String> },
+    Prompt,
     Debug,
 }
 
@@ -67,19 +82,17 @@ impl BuiltinCmd for OllamaBuiltin {
     ) -> anyhow::Result<CmdOutput> {
         let cli = Cli::try_parse_from(args)?;
 
-        let last_output = if let Some(output_capture) = ctx.state.get::<OutputCaptureState>() {
-            Some(output_capture.last_output.clone())
-        } else {
-            None
-        };
+        let oc = ctx.state.get::<OutputCaptureState>().unwrap();
+        let lo = oc.last_output.clone();
+        let c = oc.last_command.clone();
 
         if let Some(state) = ctx.state.get_mut::<OllamaState>() {
             if let Some(command) = cli.command {
                 match command {
                     Commands::Model { model } => (),
-                    Commands::Prompt { prompt } => {
+                    Commands::Prompt => {
                         let response = state.client.generate(
-                            prompt.join(" "),
+                            cli.prompt.join(" "),
                             state.model.clone(),
                             state.context.clone(),
                         )?;
@@ -89,15 +102,17 @@ impl BuiltinCmd for OllamaBuiltin {
                         state.context.clear();
                     }
                     Commands::Debug => {
-                        if let Some(lo) = last_output {
-                            println!("{:?}", lo);
-                            let response = state.client.generate(
-                                format!("Debug this {:?}", lo.stderr.clone()),
-                                state.model.clone(),
-                                state.context.clone(),
-                            )?;
-                            ctx.out.println(response.response)?;
-                        }
+                        let response = state.client.generate(
+                            format!(
+                                "Debug this input:{} output:{:?} {}",
+                                c,
+                                lo,
+                                cli.prompt.join(" ")
+                            ),
+                            state.model.clone(),
+                            state.context.clone(),
+                        )?;
+                        ctx.out.println(response.response)?;
                     }
                 }
             }

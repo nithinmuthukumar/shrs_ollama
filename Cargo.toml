@@ -13,4 +13,5 @@ serde_json = "1.0.108"
 shrs = {git = "https://github.com/MrPicklePinosaur/shrs"}
 shrs_output_capture = {git = "https://github.com/MrPicklePinosaur/shrs"}
 shrs_mux = {git = "https://github.com/MrPicklePinosaur/shrs"}
+derive_more = "0.99.17"
 
