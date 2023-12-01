@@ -1,3 +1,5 @@
+use std::{fs::File, io::Read, path::PathBuf};
+
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use request::OllamaClient;
 use reqwest::Client;
@@ -49,8 +51,6 @@ struct Cli {
     command: Option<Commands>,
     #[clap(long = "include")]
     context_include: Vec<ContextArgs>,
-
-    prompt: Vec<String>,
 }
 //What to include as extra info in the prompt, folder will include all the code in all the files in
 //the prompt
@@ -62,13 +62,26 @@ enum ContextArgs {
     File,
     Directory,
 }
+#[derive(Debug, Subcommand)]
+enum ModelCommands {}
 
 #[derive(Debug, Subcommand)]
 enum Commands {
     Reset,
-    Model { model: String },
-    Prompt,
-    Debug,
+    Model {
+        #[command(subcommand)]
+        command: Option<ModelCommands>,
+    },
+    Prompt {
+        prompt: Vec<String>,
+    },
+    Debug {
+        prompt: Vec<String>,
+    },
+    File {
+        prompt: Vec<String>,
+        path: PathBuf,
+    },
 }
 
 pub struct OllamaBuiltin {}
@@ -82,36 +95,48 @@ impl BuiltinCmd for OllamaBuiltin {
     ) -> anyhow::Result<CmdOutput> {
         let cli = Cli::try_parse_from(args)?;
 
-        let oc = ctx.state.get::<OutputCaptureState>().unwrap();
-        let lo = oc.last_output.clone();
-        let c = oc.last_command.clone();
+        let output_capture = ctx.state.get::<OutputCaptureState>().unwrap();
+        let last_output = output_capture.last_output.clone();
+        let last_command = output_capture.last_command.clone();
 
         if let Some(state) = ctx.state.get_mut::<OllamaState>() {
             if let Some(command) = cli.command {
                 match command {
-                    Commands::Model { model } => (),
-                    Commands::Prompt => {
-                        let response = state.client.generate(
-                            cli.prompt.join(" "),
-                            state.model.clone(),
-                            state.context.clone(),
-                        )?;
+                    Commands::Model { command } => match command {
+                        Some(_) => todo!(),
+                        None => ctx
+                            .out
+                            .println(format!("The current model is {}", state.model))?,
+                    },
+                    Commands::Prompt { prompt } => {
+                        let response = state.client.generate(prompt.join(" "), state)?;
+                        state.context = response.context;
                         ctx.out.println(response.response)?;
                     }
                     Commands::Reset => {
                         state.context.clear();
                     }
-                    Commands::Debug => {
+                    Commands::Debug { prompt } => {
                         let response = state.client.generate(
                             format!(
-                                "Debug this input:{} output:{:?} {}",
-                                c,
-                                lo,
-                                cli.prompt.join(" ")
+                                "Debug this bash where input is {} and the stdout was \"{}\" and stderr was \"{}\". Additional info: {}",
+                                last_command,
+                                last_output.stdout,
+                                last_output.stderr,
+                                prompt.join(" ")
                             ),
-                            state.model.clone(),
-                            state.context.clone(),
+                            state,
                         )?;
+                        state.context = response.context;
+                        ctx.out.println(response.response)?;
+                    }
+                    Commands::File { prompt, path } => {
+                        let mut file = File::open(path)?;
+                        let mut contents = String::new();
+                        file.read_to_string(&mut contents)?;
+
+                        let response = state.client.generate(prompt.join(" "), state)?;
+                        state.context = response.context;
                         ctx.out.println(response.response)?;
                     }
                 }

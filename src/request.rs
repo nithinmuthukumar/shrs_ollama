@@ -47,16 +47,15 @@ impl OllamaClient {
             url: "http://127.0.0.1:11434/api".to_string(),
         }
     }
-    pub fn generate(
-        &self,
-        prompt: String,
-        model: String,
-        context: Vec<u32>,
-    ) -> Result<GenerateResponse> {
+    pub fn generate(&self, prompt: String, state: &OllamaState) -> Result<GenerateResponse> {
         let url = format!("{}/generate", self.url);
-        let body = serde_json::to_string(&GenerateParams::new(prompt, model, context))?;
-        let res = self.client.post(url).body(body).send()?;
+        let body = serde_json::to_string(&GenerateParams::new(
+            prompt,
+            state.model.clone(),
+            state.context.clone(),
+        ))?;
+        let res: GenerateResponse = self.client.post(url).body(body).send()?.json()?;
 
-        Ok(res.json()?)
+        Ok(res)
     }
 }
